@@ -1,0 +1,827 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  AWS CloudFormation Template for Curity
+Conditions:
+  CertificateNotProvided: !Equals [ !Ref CertificateArn, "" ]
+  CertificateProvided: !Not [!Equals [ !Ref CertificateArn, "" ]]
+  CloudWatchEnabled: !Not [!Equals [ !Ref CloudWatchNamespace, "" ]]
+  CloudWatchLogsEnabled: !Equals [ !Ref EnableCloudWatchLogs, "yes" ]
+Parameters:
+  AdminUserPassword:
+    Description: Password for the admin user of the Curity configuration service
+    Type: String
+    NoEcho: 'true'
+    MaxLength: '32'
+    MinLength: '8'
+  CertificateArn:
+    Description: The ARN of the certificate to be used by the load balancer (Optional)
+    Type: String
+    AllowedPattern: ^$|arn:aws:acm:.*
+  RuntimeServiceRole:
+    Description: The Runtime service roles
+    Type: String
+    Default: "default"
+    MinLength: 1
+  RuntimePort:
+    Type: Number
+    Description: The internal port of the Curity runtime service
+    Default: 8443
+  VpcId:
+    Type: 'AWS::EC2::VPC::Id'
+    Description: VpcId of your existing Virtual Private Cloud (VPC)
+    ConstraintDescription: must be the VPC Id of an existing Virtual Private Cloud.
+  EFSDNS:
+    Type: String
+    Description: The EFS DNS for the file system containing plugins and template/translation overrides.
+  Subnets:
+    Type: 'List<AWS::EC2::Subnet::Id>'
+    Description: The list of SubnetIds in your Virtual Private Cloud (VPC)
+    ConstraintDescription: >-
+      must be a list of at least two existing subnets associated with at least
+      two different availability zones. They should be residing in the selected
+      Virtual Private Cloud.
+  AdminInstanceType:
+    Description: Admin Server Instance Type
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t3.small
+      - t3.medium
+      - t3.large
+      - t3.xlarge
+      - t3a.small
+      - t3a.medium
+      - t3a.large
+      - t3a.xlarge
+      - t2.small
+      - t2.medium
+      - t2.large
+      - t2.xlarge
+      - c4.small
+      - c4.large
+      - c4.xlarge
+    ConstraintDescription: must be a valid EC2 instance type.
+  RuntimeInstanceType:
+    Description: Runtime Server Instance Type
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t3.micro
+      - t3.medium
+      - t3.large
+      - t3.xlarge
+      - t3a.medium
+      - t3a.large
+      - t3a.xlarge
+      - t2.medium
+      - t2.large
+      - t2.xlarge
+      - c4.large
+      - c4.xlarge
+    ConstraintDescription: must be a valid EC2 instance type.
+  RuntimeMinNodeCount:
+    Description: Minimum runtime nodes to run
+    Type: Number
+    Default: 2
+    MinValue: 1
+    MaxValue: 20
+  RuntimeMaxNodeCount:
+    Description: Maximum runtime nodes to run
+    Type: Number
+    Default: 4
+    MinValue: 1
+    MaxValue: 20
+  MaxRequestsPerRuntimeNode:
+    Description: The max threshold for the number of requests per runtime node. Exceeding this for 2 times in 5 minutes will scale up the number of runtime nodes by 1
+    Type: Number
+    Default: 400
+  MinRequestsPerRuntimeNode:
+    Description: The min threshold for the number of requests per runtime node. Staying under this limit for 5 consective minutes will scale down the number of runtime nodes by 1
+    Type: Number
+    Default: 200
+  ConfigEncryptionKey:
+    Description: The key to encrypt the Curity Configuration
+    Type: String
+    NoEcho: 'true'
+  KeyName:
+    Description: The EC2 Key Pair to allow SSH access to the instances
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+  LoadBalancerIpRange:
+    Description: The IP address range that can be used to access Curity Runtime service through the load balancer
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 0.0.0.0/0
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+  TrustedIpRange:
+    Description: The IP address range that can be used to SSH to the EC2 instances and access the Curity Admin UI
+    Type: String
+    MinLength: '9'
+    MaxLength: '18'
+    Default: 0.0.0.0/0
+    AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
+    ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
+  CloudWatchNamespace:
+    Description: The namespace for the metrics pushed to CloudWatch. (Optional)
+    Type: String
+  MetricsScrapeInterval:
+    Default: 30
+    Type: Number
+    Description: How often to scrape data from Curity's metrics endpoint (in seconds)
+  EnableCloudWatchLogs:
+    Description: Send application logs to cloudwatch
+    Type: String
+    Default: "no"
+    AllowedValues:
+      - "yes"
+      - "no"
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Node Configuration"
+        Parameters:
+          - AdminInstanceType
+          - RuntimeInstanceType
+          - RuntimeMinNodeCount
+          - RuntimeMaxNodeCount
+          - KeyName
+      - Label:
+          default: "Networking"
+        Parameters:
+          - VpcId
+          - Subnets
+          - TrustedIpRange
+          - LoadBalancerIpRange
+      - Label:
+          default: "AWS Services"
+        Parameters:
+          - CertificateArn
+          - EFSDNS
+          - CloudWatchNamespace
+          - EnableCloudWatchLogs
+          - MetricsScrapeInterval
+      - Label:
+          default: "Auto Scaling"
+        Parameters:
+          - MaxRequestsPerRuntimeNode
+          - MinRequestsPerRuntimeNode
+      - Label:
+          default: "Curity Configuration"
+        Parameters:
+          - AdminUserPassword
+          - RuntimeServiceRole
+          - RuntimePort
+          - ConfigEncryptionKey
+Mappings:
+  AWSRegionAMI:
+    eu-north-1:
+      id: ami-0ef8c7a9264280992
+Resources:
+  ClusterConfigBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Delete
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+      AccessControl: Private
+  RuntimeIamRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: runtimeNodeIAMPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: 's3:GetObject'
+                Resource: !Join [ "", [ !GetAtt [ClusterConfigBucket, Arn], "/cluster.xml" ] ]
+              - Effect: Allow
+                Action: 's3:ListBucket'
+                Resource: !GetAtt [ClusterConfigBucket, Arn]
+              - Effect: Allow
+                Action: 'cloudformation:SignalResource'
+                Resource: !Ref AWS::StackId
+              - Effect: !If [CloudWatchEnabled, Allow, Deny]
+                Action: 'cloudwatch:PutMetricData'
+                Resource: '*'
+              - !If
+                - CloudWatchLogsEnabled
+                - Effect: Allow
+                  Action:
+                    - 'logs:PutLogEvents'
+                    - 'logs:CreateLogStream'
+                  Resource:
+                   - !Join ["", [ !GetAtt [RuntimeNodeLogGroup, Arn], ":log-stream:*"] ]
+                   - !GetAtt [RuntimeNodeLogGroup, Arn]
+                - Ref: AWS::NoValue
+  RuntimeNodeInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: /
+      Roles:
+        - !Ref RuntimeIamRole
+  AdminNodeIamRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: adminNodeIAMPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action: 's3:PutObject'
+                Resource: !Join [ "", [ !GetAtt [ClusterConfigBucket, Arn], "/cluster.xml" ] ]
+              - Effect: Allow
+                Action: 's3:ListBucket'
+                Resource: !GetAtt [ClusterConfigBucket, Arn]
+              - Effect: !If [CloudWatchEnabled, Allow, Deny]
+                Action: 'cloudwatch:PutMetricData'
+                Resource: '*'
+              - !If
+                - CloudWatchLogsEnabled
+                - Effect: Allow
+                  Action:
+                    - 'logs:PutLogEvents'
+                    - 'logs:CreateLogStream'
+                  Resource:
+                    - !Join ["", [ !GetAtt [AdminNodeLogGroup, Arn], ":log-stream:*"] ]
+                    - !GetAtt [AdminNodeLogGroup, Arn]
+                - Ref: AWS::NoValue
+  AdminNodeInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: /
+      Roles:
+        - !Ref AdminNodeIamRole
+  AdminNode:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      IamInstanceProfile: !Ref AdminNodeInstanceProfile
+      Tags:
+        - Key: "Name"
+          Value: "Curity Admin Node"
+      InstanceType: !Ref AdminInstanceType
+      UserData:
+        Fn::Base64: !Sub
+          - |
+            #cloud-config
+            # vim: syntax=yaml
+            write_files:
+            - content: |
+                CONFIG_ENCRYPTION_KEY="${ConfigEncryptionKey}"
+                CURITY_CFN_ADMIN="true"
+                S3_BUCKET_NAME="${ClusterConfigBucket}"
+                PASSWORD="${AdminUserPassword}"
+                SERVICE_ROLE="admin"
+                EFS_DNS="${EFSDNS}"
+                CLOUDWATCH_NAMESPACE="${CloudWatchNamespace}"
+                ${ENABLE_CLOUDWATCH_LOGS}
+              append: true
+              path: /etc/idsvr.environment
+            - content: |
+                [Mount]
+                What=EFS_DNS_PLACEHOLDER:/
+                Where=/data
+                Type=nfs
+              path: /etc/systemd/system/data.mount
+            - content: |
+                [Unit]
+                Description=The Curity Identity Server metrics exporter
+                After=idsvr.service
+                [Service]
+                Environment=PROMETHEUS_SCRAPE_URL=http://localhost:4466/metrics
+                Environment=CLOUDWATCH_NAMESPACE=NAMESPACE_PLACEHOLDER
+                Environment=PROMETHEUS_SCRAPE_INTERVAL=${MetricsScrapeInterval}
+                Environment=CLOUDWATCH_PUBLISH_TIMEOUT=5
+                Environment=CLOUDWATCH_REGION=${AWS::Region}
+                User=idsvr
+                ExecStart=/usr/local/bin/prometheus-to-cloudwatch
+                [Install]
+                WantedBy=multi-user.target
+              path: /etc/systemd/system/idsvrmetrics.service
+            - content: |
+                {
+                  "agent": {
+                    "logfile": "/opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log"
+                  },
+                  "logs": {
+                    "logs_collected": {
+                      "files": {
+                        "collect_list": [
+                        {
+                          "file_path": "/opt/idsvr/var/log/cluster.log",
+                          "log_group_name": "${AdminNodeLogGroup}",
+                          "log_stream_name": "{instance_id}/cluster.log",
+                          "timezone": "UTC",
+                          "timestamp_format": "%Y-%m-%dT%H:%M:%S:%f%z"
+                        },
+                        {
+                          "file_path": "/opt/idsvr/var/log/server.log",
+                          "log_group_name": "${AdminNodeLogGroup}",
+                          "log_stream_name": "{instance_id}/server.log",
+                          "timezone": "UTC",
+                          "timestamp_format": "%Y-%m-%dT%H:%M:%S:%f%z"
+                        },
+                        {
+                          "file_path": "/opt/idsvr/var/log/confsvc.log",
+                          "log_group_name": "${AdminNodeLogGroup}",
+                          "log_stream_name": "{instance_id}/confsvc.log",
+                          "timezone": "UTC",
+                          "timestamp_format": "%d %b %Y %H:%M:%S.%f"
+                        },
+                        {
+                          "file_path": "/opt/idsvr/var/log/confsvc-internal.log",
+                          "log_group_name": "${AdminNodeLogGroup}",
+                          "log_stream_name": "{instance_id}/confsvc-internal.log",
+                          "timezone": "UTC",
+                          "timestamp_format": " %-d-%b-%Y::%H:%M:%S.%f"
+                        },
+                        {
+                          "file_path": "/opt/idsvr/var/log/post-commit-scripts.log",
+                          "log_group_name": "${AdminNodeLogGroup}",
+                          "log_stream_name": "{instance_id}/post-commit-scripts.log",
+                          "timezone": "UTC",
+                          "timestamp_format": "%Y-%m-%dT%H:%M:%S:%f%z"
+                        },
+                        {
+                          "file_path": "/opt/idsvr/var/log/audit.log",
+                          "log_group_name": "${AdminNodeLogGroup}",
+                          "log_stream_name": "{instance_id}/audit.log",
+                          "timezone": "UTC",
+                          "timestamp_format": "%Y-%m-%dT%H:%M:%S:%f%z"
+                        },
+                        {
+                          "file_path": "/opt/idsvr/var/log/request.log",
+                          "log_group_name": "${AdminNodeLogGroup}",
+                          "log_stream_name": "{instance_id}/request.log",
+                          "timezone": "UTC",
+                          "timestamp_format": "%Y-%m-%dT%H:%M:%S:%f%z"
+                        }
+                        ]
+                      }
+                    },
+                    "force_flush_interval" : 15
+                  }
+                }
+              path: /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.d/idsvr.conf
+          - {ENABLE_CLOUDWATCH_LOGS : !If [CloudWatchLogsEnabled, "ENABLE_CLOUDWATCH_LOGS=true", ""]}
+      KeyName: !Ref KeyName
+      ImageId: !FindInMap
+        - AWSRegionAMI
+        - !Ref 'AWS::Region'
+        - id
+      SecurityGroupIds:
+        - !Ref AdminSecurityGroup
+  AdminSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: This security group is attached to the Admin Node and allows to access the Admin UI and SSH from the trusted IP range and the config service port from the Runtime Nodes.
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: !Ref TrustedIpRange
+        - !If
+          - CertificateNotProvided
+          - CidrIp: !Ref TrustedIpRange
+            IpProtocol: tcp
+            ToPort: '6749'
+            FromPort: '6749'
+          - SourceSecurityGroupId: !Ref LoadBalancerSecurityGroupWithAdminUI
+            IpProtocol: tcp
+            ToPort: '6749'
+            FromPort: '6749'
+        - IpProtocol: tcp
+          FromPort: '6789'
+          ToPort: '6789'
+          SourceSecurityGroupId: !Ref RuntimeSecurityGroup
+      VpcId: !Ref VpcId
+  LoadBalancerSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Condition: CertificateNotProvided
+    Properties:
+      GroupDescription: Allow access to port 80 from the IP range configured in LoadBalancerIpRange
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: !Ref LoadBalancerIpRange
+      VpcId: !Ref VpcId
+  LoadBalancerSecurityGroupWithAdminUI:
+    Condition: CertificateProvided
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Allow access to port 80 from the IP range configured in LoadBalancerIpRange and to port 6749 from the TrustedIpRange
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: !Ref LoadBalancerIpRange
+        - IpProtocol: tcp
+          FromPort: 6749
+          ToPort: 6749
+          CidrIp: !Ref TrustedIpRange
+      VpcId: !Ref VpcId
+  RuntimeASG:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    DependsOn: AdminNode
+    Properties:
+      Tags:
+        - Key: "Name"
+          Value: "Curity Runtime Node"
+          PropagateAtLaunch: true
+      VPCZoneIdentifier: !Ref Subnets
+      LaunchConfigurationName: !Ref RuntimeLaunchConfig
+      MinSize: !Ref RuntimeMinNodeCount
+      MaxSize: !Ref RuntimeMaxNodeCount
+      TargetGroupARNs:
+        - !Ref RuntimeLbTargetGroup
+      MetricsCollection:
+        - Granularity: 1Minute
+          Metrics:
+            - GroupInServiceInstances
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+        Count: '1'
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: '1'
+        MaxBatchSize: '1'
+        PauseTime: PT15M
+        WaitOnResourceSignals: 'true'
+  RuntimeLaunchConfig:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
+    Properties:
+      IamInstanceProfile: !GetAtt [RuntimeNodeInstanceProfile, Arn]
+      KeyName: !Ref KeyName
+      ImageId: !FindInMap
+        - AWSRegionAMI
+        - !Ref 'AWS::Region'
+        - id
+      UserData:
+        Fn::Base64: !Sub
+          - |
+            #cloud-config
+            # vim: syntax=yaml
+            write_files:
+            - content: |
+                CONFIG_ENCRYPTION_KEY="${ConfigEncryptionKey}"
+                CURITY_CFN_RUNTIME="true"
+                S3_BUCKET_NAME="${ClusterConfigBucket}"
+                RUNTIME_SERVICE_ROLE="${RuntimeServiceRole}"
+                CF_STACK_ID="${AWS::StackName}"
+                AWS_REGION="${AWS::Region}"
+                SIGNAL_RESOURCE_ID="RuntimeASG"
+                EFS_DNS="${EFSDNS}"
+                CLOUDWATCH_NAMESPACE="${CloudWatchNamespace}"
+                ${ENABLE_CLOUDWATCH_LOGS}
+              append: true
+              path: /etc/idsvr.environment
+            - content: |
+                [Mount]
+                What=EFS_DNS_PLACEHOLDER:/
+                Where=/data
+                Type=nfs
+              path: /etc/systemd/system/data.mount
+            - content: |
+                [Unit]
+                Description=The Curity Identity Server metrics exporter
+                After=idsvr.service
+                [Service]
+                Environment=PROMETHEUS_SCRAPE_URL=http://localhost:4466/metrics
+                Environment=CLOUDWATCH_NAMESPACE=NAMESPACE_PLACEHOLDER
+                Environment=PROMETHEUS_SCRAPE_INTERVAL=${MetricsScrapeInterval}
+                Environment=CLOUDWATCH_PUBLISH_TIMEOUT=5
+                Environment=CLOUDWATCH_REGION=${AWS::Region}
+                User=idsvr
+                ExecStart=/usr/local/bin/prometheus-to-cloudwatch
+                [Install]
+                WantedBy=multi-user.target
+              path: /etc/systemd/system/idsvrmetrics.service
+            - content: |
+                {
+                  "agent": {
+                    "logfile": "/opt/aws/amazon-cloudwatch-agent/logs/amazon-cloudwatch-agent.log"
+                  },
+                  "logs": {
+                    "logs_collected": {
+                      "files": {
+                        "collect_list": [
+                        {
+                          "file_path": "/opt/idsvr/var/log/cluster.log",
+                          "log_group_name": "${RuntimeNodeLogGroup}",
+                          "log_stream_name": "{instance_id}/cluster.log",
+                          "timezone": "UTC",
+                          "timestamp_format": "%Y-%m-%dT%H:%M:%S:%f%z"
+                        },
+                        {
+                          "file_path": "/opt/idsvr/var/log/server.log",
+                          "log_group_name": "${RuntimeNodeLogGroup}",
+                          "log_stream_name": "{instance_id}/server.log",
+                          "timezone": "UTC",
+                          "timestamp_format": "%Y-%m-%dT%H:%M:%S:%f%z"
+                        },
+                        {
+                          "file_path": "/opt/idsvr/var/log/confsvc.log",
+                          "log_group_name": "${RuntimeNodeLogGroup}",
+                          "log_stream_name": "{instance_id}/confsvc.log",
+                          "timezone": "UTC",
+                          "timestamp_format": "%d %b %Y %H:%M:%S.%f"
+                        },
+                        {
+                          "file_path": "/opt/idsvr/var/log/confsvc-internal.log",
+                          "log_group_name": "${RuntimeNodeLogGroup}",
+                          "log_stream_name": "{instance_id}/confsvc-internal.log",
+                          "timezone": "UTC",
+                          "timestamp_format": " %-d-%b-%Y::%H:%M:%S.%f"
+                        },
+                        {
+                          "file_path": "/opt/idsvr/var/log/post-commit-scripts.log",
+                          "log_group_name": "${RuntimeNodeLogGroup}",
+                          "log_stream_name": "{instance_id}/post-commit-scripts.log",
+                          "timezone": "UTC",
+                          "timestamp_format": "%Y-%m-%dT%H:%M:%S:%f%z"
+                        },
+                        {
+                          "file_path": "/opt/idsvr/var/log/audit.log",
+                          "log_group_name": "${RuntimeNodeLogGroup}",
+                          "log_stream_name": "{instance_id}/audit.log",
+                          "timezone": "UTC",
+                          "timestamp_format": "%Y-%m-%dT%H:%M:%S:%f%z"
+                        },
+                        {
+                          "file_path": "/opt/idsvr/var/log/request.log",
+                          "log_group_name": "${RuntimeNodeLogGroup}",
+                          "log_stream_name": "{instance_id}/request.log",
+                          "timezone": "UTC",
+                          "timestamp_format": "%Y-%m-%dT%H:%M:%S:%f%z"
+                        }
+                        ]
+                      }
+                    },
+                    "force_flush_interval" : 15
+                  }
+                }
+              path: /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.d/idsvr.conf
+          - {ENABLE_CLOUDWATCH_LOGS : !If [CloudWatchLogsEnabled, "ENABLE_CLOUDWATCH_LOGS=true", ""]}
+      SecurityGroups:
+        - !Ref RuntimeSecurityGroup
+      InstanceType: !Ref RuntimeInstanceType
+  RuntimeScaleUpPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref RuntimeASG
+      Cooldown: '60'
+      ScalingAdjustment: '1'
+  RuntimeScaleDownPolicy:
+    Type: 'AWS::AutoScaling::ScalingPolicy'
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref RuntimeASG
+      Cooldown: '60'
+      ScalingAdjustment: '-1'
+  ScaleUpAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmDescription: Scale up if number of active connections per node > $MaxRequestsPerRuntimeNode for 5 minutes
+      Metrics:
+        - Expression: activeConnectionCount/instanceCount
+          Id: instanceCountPerNode
+          Label: 'Number of active connections per node'
+          ReturnData: true
+        - Id: instanceCount
+          Label: 'Number of active runtime nodes'
+          MetricStat:
+            Metric:
+              MetricName: GroupInServiceInstances
+              Namespace: AWS/AutoScaling
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value: !Ref RuntimeASG
+            Period: 60
+            Stat: Sum
+          ReturnData: false
+        - Id: activeConnectionCount
+          Label: 'Number of active total active connections'
+          MetricStat:
+            Metric:
+              MetricName: ActiveConnectionCount
+              Namespace: AWS/ApplicationELB
+              Dimensions:
+                - Name: LoadBalancer
+                  Value: !GetAtt [RuntimeLoadBalancer, LoadBalancerFullName]
+            Period: 60
+            Stat: Sum
+          ReturnData: false
+      EvaluationPeriods: 5
+      Threshold: !Ref MaxRequestsPerRuntimeNode
+      DatapointsToAlarm: 2
+      AlarmActions:
+        - !Ref RuntimeScaleUpPolicy
+      ComparisonOperator: GreaterThanThreshold
+  ScaleDownAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      AlarmDescription: Scale down if number of active connections per node < $MinRequestsPerRuntimeNode for 5 consecutive minutes
+      Metrics:
+        - Expression: activeConnectionCount/instanceCount
+          Id: instanceCountPerNode
+          Label: 'Number of active connections per node'
+          ReturnData: true
+        - Id: instanceCount
+          Label: 'Number of active runtime nodes'
+          MetricStat:
+            Metric:
+              MetricName: GroupInServiceInstances
+              Namespace: AWS/AutoScaling
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value: !Ref RuntimeASG
+            Period: 60
+            Stat: Sum
+          ReturnData: false
+        - Id: activeConnectionCount
+          Label: 'Number of active total active connections'
+          MetricStat:
+            Metric:
+              MetricName: ActiveConnectionCount
+              Namespace: AWS/ApplicationELB
+              Dimensions:
+                - Name: LoadBalancer
+                  Value: !GetAtt [RuntimeLoadBalancer, LoadBalancerFullName]
+            Period: 60
+            Stat: Sum
+          ReturnData: false
+      EvaluationPeriods: 5
+      Threshold: !Ref MinRequestsPerRuntimeNode
+      DatapointsToAlarm: 5
+      AlarmActions:
+        - !Ref RuntimeScaleDownPolicy
+      ComparisonOperator: LessThanThreshold
+  RuntimeLoadBalancer:
+    Type: 'AWS::ElasticLoadBalancingV2::LoadBalancer'
+    Properties:
+      Subnets: !Ref Subnets
+      SecurityGroups:
+        - !If [CertificateNotProvided, !Ref LoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroupWithAdminUI]
+  RuntimeHTTPLbListener:
+    Condition: CertificateNotProvided
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref RuntimeLbTargetGroup
+      LoadBalancerArn: !Ref RuntimeLoadBalancer
+      Port: 80
+      Protocol: HTTP
+  RuntimeHTTPSLbListener:
+    Condition: CertificateProvided
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref RuntimeLbTargetGroup
+      LoadBalancerArn: !Ref RuntimeLoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref CertificateArn
+  AdminUILbListener:
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Condition: CertificateProvided
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref AdminLbTargetGroup
+      LoadBalancerArn: !Ref RuntimeLoadBalancer
+      Port: 6749
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn:  !Ref CertificateArn
+  RuntimeLbTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Properties:
+      HealthCheckPort: 4465
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 10
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      Port: !Ref RuntimePort
+      Protocol: !If [CertificateNotProvided, HTTP, HTTPS]
+      UnhealthyThresholdCount: 5
+      VpcId: !Ref VpcId
+  AdminLbTargetGroup:
+    Type: 'AWS::ElasticLoadBalancingV2::TargetGroup'
+    Condition: CertificateProvided
+    Properties:
+      Targets:
+        - Id: !Ref AdminNode
+      HealthCheckPort: 4465
+      HealthCheckProtocol: HTTP
+      HealthCheckIntervalSeconds: 10
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 3
+      Port: 6749
+      Protocol: HTTPS
+      UnhealthyThresholdCount: 5
+      VpcId: !Ref VpcId
+  RuntimeSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Enable SSH access and HTTP from the load balancer only
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: !Ref TrustedIpRange
+        - IpProtocol: tcp
+          FromPort: 4465
+          ToPort: 4465
+          SourceSecurityGroupId: !Select
+            - 0
+            - !GetAtt
+              - RuntimeLoadBalancer
+              - SecurityGroups
+        - IpProtocol: tcp
+          FromPort: !Ref RuntimePort
+          ToPort: !Ref RuntimePort
+          SourceSecurityGroupId: !Select
+            - 0
+            - !GetAtt
+              - RuntimeLoadBalancer
+              - SecurityGroups
+      VpcId: !Ref VpcId
+  RuntimeNodeLogGroup:
+    Type: 'AWS::Logs::LogGroup'
+  AdminNodeLogGroup:
+    Type: 'AWS::Logs::LogGroup'
+Outputs:
+  CurityService:
+    Condition: CertificateNotProvided
+    Description: Curity Runtime Service
+    Value: !Join
+      - ''
+      - - 'http://'
+        - !GetAtt
+          - RuntimeLoadBalancer
+          - DNSName
+        - !Ref RuntimePort
+  AdminUI:
+    Condition: CertificateNotProvided
+    Description: Curity Admin UI
+    Value: !Join
+      - ''
+      - - 'https://'
+        - !GetAtt
+          - AdminNode
+          - PublicDnsName
+        - ':6749/admin'
+  CurityServiceHttps:
+    Condition: CertificateProvided
+    Description: Curity Runtime Service
+    Value: !Join
+      - ''
+      - - 'https://'
+        - !GetAtt
+          - RuntimeLoadBalancer
+          - DNSName
+  AdminUIHttps:
+    Condition: CertificateProvided
+    Description: Curity Admin UI
+    Value: !Join
+      - ''
+      - - 'https://'
+        - !GetAtt
+          - RuntimeLoadBalancer
+          - DNSName
+        - ':6749/admin'
+
