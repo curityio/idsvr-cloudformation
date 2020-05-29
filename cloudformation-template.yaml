@@ -43,9 +43,8 @@ Parameters:
   AdminInstanceType:
     Description: Admin Server Instance Type
     Type: String
-    Default: t3.micro
+    Default: t3.small
     AllowedValues:
-      - t3.micro
       - t3.small
       - t3.medium
       - t3.large
@@ -65,9 +64,8 @@ Parameters:
   RuntimeInstanceType:
     Description: Runtime Server Instance Type
     Type: String
-    Default: t3.micro
+    Default: t3.small
     AllowedValues:
-      - t3.micro
       - t3.medium
       - t3.large
       - t3.xlarge
