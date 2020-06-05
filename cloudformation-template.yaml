@@ -245,8 +245,8 @@ Resources:
                     - 'logs:PutLogEvents'
                     - 'logs:CreateLogStream'
                   Resource:
-                   - !Join ["", [ !GetAtt [RuntimeNodeLogGroup, Arn], ":log-stream:*"] ]
-                   - !GetAtt [RuntimeNodeLogGroup, Arn]
+                    - !Join ["", [ !GetAtt [RuntimeNodeLogGroup, Arn], ":log-stream:*"] ]
+                    - !GetAtt [RuntimeNodeLogGroup, Arn]
                 - Ref: AWS::NoValue
   RuntimeNodeInstanceProfile:
     Type: 'AWS::IAM::InstanceProfile'
@@ -300,6 +300,7 @@ Resources:
   AdminNode:
     Type: 'AWS::EC2::Instance'
     Properties:
+      SubnetId: !Select [ 0 , {"Ref": "Subnets"}]
       IamInstanceProfile: !Ref AdminNodeInstanceProfile
       Tags:
         - Key: "Name"
@@ -408,7 +409,7 @@ Resources:
                   }
                 }
               path: /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.d/idsvr.conf
-          - {ENABLE_CLOUDWATCH_LOGS : !If [CloudWatchLogsEnabled, "ENABLE_CLOUDWATCH_LOGS=true", ""]}
+          - {ENABLE_CLOUDWATCH_LOGS: !If [CloudWatchLogsEnabled, "ENABLE_CLOUDWATCH_LOGS=true", ""]}
       KeyName: !Ref KeyName
       ImageId: !FindInMap
         - AWSRegionAMI
@@ -608,7 +609,7 @@ Resources:
                   }
                 }
               path: /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.d/idsvr.conf
-          - {ENABLE_CLOUDWATCH_LOGS : !If [CloudWatchLogsEnabled, "ENABLE_CLOUDWATCH_LOGS=true", ""]}
+          - {ENABLE_CLOUDWATCH_LOGS: !If [CloudWatchLogsEnabled, "ENABLE_CLOUDWATCH_LOGS=true", ""]}
       SecurityGroups:
         - !Ref RuntimeSecurityGroup
       InstanceType: !Ref RuntimeInstanceType
@@ -811,7 +812,6 @@ Outputs:
         - !GetAtt
           - RuntimeLoadBalancer
           - DNSName
-        - !Ref RuntimePort
   AdminUI:
     Condition: CertificateNotProvided
     Description: Curity Admin UI
