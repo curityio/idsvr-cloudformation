@@ -108,7 +108,7 @@ Parameters:
     Type: 'AWS::EC2::KeyPair::KeyName'
     ConstraintDescription: must be the name of an existing EC2 KeyPair.
   LoadBalancerIpRange:
-    Description: The IP address range that can be used to access Curity Runtime service through the load balancer
+    Description: The IP address range that can be used to access Curity Runtime service through the load balancer, in CIDR format
     Type: String
     MinLength: '9'
     MaxLength: '18'
@@ -116,7 +116,7 @@ Parameters:
     AllowedPattern: '(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})'
     ConstraintDescription: must be a valid IP CIDR range of the form x.x.x.x/x.
   TrustedIpRange:
-    Description: The IP address range that can be used to SSH to the EC2 instances and access the Curity Admin UI
+    Description: The IP address range that can be used to SSH to the EC2 instances and access the Curity Admin UI, in CIDR format
     Type: String
     MinLength: '9'
     MaxLength: '18'
@@ -456,11 +456,15 @@ Resources:
     Condition: CertificateProvided
     Type: 'AWS::EC2::SecurityGroup'
     Properties:
-      GroupDescription: Allow access to port 80 from the IP range configured in LoadBalancerIpRange and to port 6749 from the TrustedIpRange
+      GroupDescription: Allow access to port 80 and 443 from the IP range configured in LoadBalancerIpRange and to port 6749 from the TrustedIpRange
       SecurityGroupIngress:
         - IpProtocol: tcp
           FromPort: 443
           ToPort: 443
+          CidrIp: !Ref LoadBalancerIpRange
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
           CidrIp: !Ref LoadBalancerIpRange
         - IpProtocol: tcp
           FromPort: 6749
@@ -718,6 +722,22 @@ Resources:
       DefaultActions:
         - Type: forward
           TargetGroupArn: !Ref RuntimeLbTargetGroup
+      LoadBalancerArn: !Ref RuntimeLoadBalancer
+      Port: 80
+      Protocol: HTTP
+  RuntimeHTTPRedirectLbListener:
+    Condition: CertificateProvided
+    Type: 'AWS::ElasticLoadBalancingV2::Listener'
+    Properties:
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig:
+            Host: "#{host}"
+            Path: "/#{path}"
+            Port: 443
+            Protocol: "HTTPS"
+            Query: "#{query}"
+            StatusCode: HTTP_301
       LoadBalancerArn: !Ref RuntimeLoadBalancer
       Port: 80
       Protocol: HTTP
