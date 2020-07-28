@@ -178,25 +178,25 @@ Metadata:
 Mappings:
   AWSRegionAMI:
     eu-west-1:
-      id: ami-00251eb37f31d9da6
+      id: ami-085f841addf3d0d5e
     eu-west-2:
-      id: ami-03f3461de2485a864
+      id: ami-0d5a4388164ae5e70
     eu-west-3:
-      id: ami-099749846efb18af0
+      id: ami-03744ca517e5a990a
     eu-north-1:
-      id: ami-0ef8c7a9264280992
+      id: ami-068f1d6832fc9ebcc
     eu-central-1:
-      id: ami-0a18771c5ddbe2e2c
+      id: ami-0dc81e6d5fade5f19
     us-east-1:
-      id: ami-0384c41b1d1b3d3db
+      id: ami-04a3e9919cc05bd78
     us-east-2:
-      id: ami-05aebe35472e1a53b
+      id: ami-049db90fa21353876
     us-west-1:
-      id: ami-01d076f872cbed0d4
+      id: ami-06115135c9414fe32
     us-west-2:
-      id: ami-04d5dfcef0b7c6514
+      id: ami-026c031c5f58aaec0
     ca-central-1:
-      id: ami-07fe667475457b61d
+      id: ami-029c2830eaf9775ec
 Resources:
   ClusterConfigBucket:
     Type: AWS::S3::Bucket
