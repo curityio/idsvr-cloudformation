@@ -197,6 +197,10 @@ Mappings:
       id: ami-084833f094bdab459
     ca-central-1:
       id: ami-0812e69495c85bb96
+    ap-southeast-1:
+      id: ami-0aa1eb4c8546e5635
+    ap-southeast-2:
+      id: ami-0aba8f44d4bd5d439
 Resources:
   ClusterConfigBucket:
     Type: AWS::S3::Bucket
