@@ -177,30 +177,30 @@ Metadata:
           - ConfigEncryptionKey
 Mappings:
   AWSRegionAMI:
-    eu-west-1:
-      id: ami-04b62aea336cc377c
-    eu-west-2:
-      id: ami-0e50c0b4218236cac
-    eu-west-3:
-      id: ami-0c582f2e369c4337b
     eu-north-1:
-      id: ami-0b483f0d2bbb46c2f
-    eu-central-1:
-      id: ami-0bd8361571d4d74b8
-    us-east-1:
-      id: ami-01f7d69d95907dd1c
-    us-east-2:
-      id: ami-05c18e200ed68819d
-    us-west-1:
-      id: ami-000f7b3a375c41a3c
-    us-west-2:
-      id: ami-084833f094bdab459
+      id: ami-0a493a961d309bcc6
+    eu-west-2:
+      id: ami-081c664cf8d6a3f2d
+    eu-west-1:
+      id: ami-0880e7628312d8acc
     ca-central-1:
-      id: ami-0812e69495c85bb96
+      id: ami-0f355a49e69c325d8
+    us-east-2:
+      id: ami-0bc6222e8d0c25da8
+    us-east-1:
+      id: ami-027764c1536178096
+    us-west-2:
+      id: ami-0491e5b43e3ea1101
     ap-southeast-1:
-      id: ami-0aa1eb4c8546e5635
+      id: ami-0389140f4f976377c
     ap-southeast-2:
-      id: ami-0aba8f44d4bd5d439
+      id: ami-0de6bde9b34bde097
+    eu-west-3:
+      id: ami-03b1d575fd606fe9b
+    eu-central-1:
+      id: ami-0616397977dc6405a
+    us-west-1:
+      id: ami-0b5be73571692b35d
 Resources:
   ClusterConfigBucket:
     Type: AWS::S3::Bucket
