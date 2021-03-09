@@ -96,7 +96,11 @@ The EFS storage, when configured, is mounted into the `/data` folder in the all 
 /opt/idsvr/usr/share/templates/template-areas -> /data/templates/template-areas
 /opt/idsvr/usr/share/plugins -> /data/plugins
 ```
-In this CloudFormation template, the EFS storage is mounted into the `/data` folder
+
+Also, the first-run script of the Curity Identity Server will copy all files under `<EFS_MOUNT_POINT>/config/` into `/opt/idsvr/etc/init/`. This way the cluster can be initialized with configuration.
+
+> **_NOTE:_** Do not include cluster configuration, or a file called cluster.xml in the `config` folder, as it will be overridden by the one generated during startup. 
+
 
 ## More Information
 
