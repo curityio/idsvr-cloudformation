@@ -34,7 +34,7 @@ Parameter | Description | Default
 `TrustedIpRange` | The IP address range that can be used to SSH to the EC2 instances and access the Curity Admin UI | `0.0.0.0/0`
 `LoadBalancerIpRange` | The IP address range that can be used to access Curity Runtime service through the load balancer | `0.0.0.0/0`
 `CertificateArn` | The ARN of the certificate to be used by the load balancer * | `null` (optional)
-`EFSDNS` | The EFS DNS for the file system containing plugins and template/translation overrides. * | `null` (optional)
+`EFSDNS` | The EFS DNS for the file system containing configuration, plugins and template/translation overrides. * | `null` (optional)
 `CloudWatchNamespace` | The namespace for the metrics pushed to CloudWatch. If not set, the metrics will not be pushed to CloudWatch | `null` (optional)
 `EnableCloudWatchLogs` | Send application logs to cloudwatch | `no`
 `MetricsScrapeInterval` | How often to scrape data from Curity's metrics endpoint (in seconds) | `30`
