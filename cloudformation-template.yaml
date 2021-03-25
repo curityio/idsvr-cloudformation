@@ -175,33 +175,68 @@ Metadata:
           - RuntimeServiceRole
           - RuntimePort
           - ConfigEncryptionKey
-Mappings:
-  AWSRegionAMI:
-    eu-north-1:
-      id: ami-0a493a961d309bcc6
-    eu-west-2:
-      id: ami-081c664cf8d6a3f2d
-    eu-west-1:
-      id: ami-0880e7628312d8acc
-    ca-central-1:
-      id: ami-0f355a49e69c325d8
-    us-east-2:
-      id: ami-0bc6222e8d0c25da8
-    us-east-1:
-      id: ami-027764c1536178096
-    us-west-2:
-      id: ami-0491e5b43e3ea1101
-    ap-southeast-1:
-      id: ami-0389140f4f976377c
-    ap-southeast-2:
-      id: ami-0de6bde9b34bde097
-    eu-west-3:
-      id: ami-03b1d575fd606fe9b
-    eu-central-1:
-      id: ami-0616397977dc6405a
-    us-west-1:
-      id: ami-0b5be73571692b35d
 Resources:
+  DescribeImagesRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DescribeImages
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Action: ec2:DescribeImages
+                Effect: Allow
+                Resource: "*"
+  GetLatestAMI:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.6
+      Handler: index.handler
+      Role: !Sub ${DescribeImagesRole.Arn}
+      Timeout: 60
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+          import json
+          import traceback
+
+          def handler(event, context):
+            try:
+              response = boto3.client('ec2').describe_images(
+                  Owners=[event['ResourceProperties']['Owner']],
+                  Filters=[
+                    {'Name': 'name', 'Values': [event['ResourceProperties']['Name']]},
+                    {'Name': 'architecture', 'Values': [event['ResourceProperties']['Architecture']]},
+                    {'Name': 'root-device-type', 'Values': ['ebs']},
+                  ],
+              )
+
+              amis = sorted(response['Images'],
+                            key=lambda x: x['CreationDate'],
+                            reverse=True)
+              id = amis[0]['ImageId']
+
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, {}, id)
+            except:
+              traceback.print_last()
+              cfnresponse.send(event, context, cfnresponse.FAIL, {}, "ok")
+  CurityLatestAMI:
+    Type: Custom::FindAMI
+    Properties:
+      ServiceToken: !Sub ${GetLatestAMI.Arn}
+      Owner: "536652696790"
+      Name: "Curity-*"
+      Architecture: "x86_64"
   ClusterConfigBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Delete
@@ -415,10 +450,7 @@ Resources:
               path: /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.d/idsvr.conf
           - {ENABLE_CLOUDWATCH_LOGS: !If [CloudWatchLogsEnabled, "ENABLE_CLOUDWATCH_LOGS=true", ""]}
       KeyName: !Ref KeyName
-      ImageId: !FindInMap
-        - AWSRegionAMI
-        - !Ref 'AWS::Region'
-        - id
+      ImageId: !Ref CurityLatestAMI
       SecurityGroupIds:
         - !Ref AdminSecurityGroup
   AdminSecurityGroup:
@@ -508,10 +540,7 @@ Resources:
     Properties:
       IamInstanceProfile: !GetAtt [RuntimeNodeInstanceProfile, Arn]
       KeyName: !Ref KeyName
-      ImageId: !FindInMap
-        - AWSRegionAMI
-        - !Ref 'AWS::Region'
-        - id
+      ImageId: !Ref CurityLatestAMI
       UserData:
         Fn::Base64: !Sub
           - |

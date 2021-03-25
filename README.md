@@ -34,7 +34,7 @@ Parameter | Description | Default
 `TrustedIpRange` | The IP address range that can be used to SSH to the EC2 instances and access the Curity Admin UI | `0.0.0.0/0`
 `LoadBalancerIpRange` | The IP address range that can be used to access Curity Runtime service through the load balancer | `0.0.0.0/0`
 `CertificateArn` | The ARN of the certificate to be used by the load balancer * | `null` (optional)
-`EFSDNS` | The EFS DNS for the file system containing plugins and template/translation overrides. * | `null` (optional)
+`EFSDNS` | The EFS DNS for the file system containing configuration, plugins and template/translation overrides. * | `null` (optional)
 `CloudWatchNamespace` | The namespace for the metrics pushed to CloudWatch. If not set, the metrics will not be pushed to CloudWatch | `null` (optional)
 `EnableCloudWatchLogs` | Send application logs to cloudwatch | `no`
 `MetricsScrapeInterval` | How often to scrape data from Curity's metrics endpoint (in seconds) | `30`
@@ -96,7 +96,11 @@ The EFS storage, when configured, is mounted into the `/data` folder in the all 
 /opt/idsvr/usr/share/templates/template-areas -> /data/templates/template-areas
 /opt/idsvr/usr/share/plugins -> /data/plugins
 ```
-In this CloudFormation template, the EFS storage is mounted into the `/data` folder
+
+Also, the first-run script of the Curity Identity Server will copy all files under `<EFS_MOUNT_POINT>/config/` into `/opt/idsvr/etc/init/`. This way the cluster can be initialized with configuration.
+
+> **_NOTE:_** Do not include cluster configuration, or a file called cluster.xml in the `config` folder, as it will be overridden by the one generated during startup. 
+
 
 ## More Information
 
