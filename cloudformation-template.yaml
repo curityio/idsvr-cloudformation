@@ -462,6 +462,14 @@ Resources:
           FromPort: '22'
           ToPort: '22'
           CidrIp: !Ref TrustedIpRange
+        - IpProtocol: tcp
+          FromPort: 4465
+          ToPort: 4465
+          SourceSecurityGroupId: !Select
+            - 0
+            - !GetAtt
+              - RuntimeLoadBalancer
+              - SecurityGroups
         - !If
           - CertificateNotProvided
           - CidrIp: !Ref TrustedIpRange
