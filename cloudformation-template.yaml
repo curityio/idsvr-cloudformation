@@ -380,6 +380,8 @@ Resources:
                 Environment=CLOUDWATCH_REGION=${AWS::Region}
                 User=idsvr
                 ExecStart=/usr/local/bin/prometheus-to-cloudwatch
+                Restart=on-failure
+                RestartSec=10s
                 [Install]
                 WantedBy=multi-user.target
               path: /etc/systemd/system/idsvrmetrics.service
@@ -586,6 +588,8 @@ Resources:
                 Environment=CLOUDWATCH_REGION=${AWS::Region}
                 User=idsvr
                 ExecStart=/usr/local/bin/prometheus-to-cloudwatch
+                Restart=on-failure
+                RestartSec=10s
                 [Install]
                 WantedBy=multi-user.target
               path: /etc/systemd/system/idsvrmetrics.service
