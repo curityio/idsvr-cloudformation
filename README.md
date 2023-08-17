@@ -1,4 +1,9 @@
 # Curity CloudFormation Template
+
+[![Quality](https://img.shields.io/badge/quality-demo-red)](https://curity.io/resources/code-examples/status/)
+[![Availability](https://img.shields.io/badge/availability-source-blue)](https://curity.io/resources/code-examples/status/)
+
+
 ## Introduction
 This CloudFormation template creates a Curity Identity server cluster in AWS.
 The cluster is installed in a [Standalone Admin setup](https://developer.curity.io/docs/latest/system-admin-guide/deployment/clustering.html#standalone-admin-setup) and the cluster configuration is generated during installation of the template.
