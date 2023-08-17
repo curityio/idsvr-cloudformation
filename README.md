@@ -21,7 +21,7 @@ Installed Resources:
 
 ## Configuration
 
-When importing this template into CloudFormation, it is possible to configure or ommit using several key resources, such as logging and CloudWatch metrics. The parameters are explained in the following table
+When importing this template into CloudFormation, it is possible to configure or omit using several key resources, such as logging and CloudWatch metrics. The parameters are explained in the following table
 Parameter | Description | Default
 --- | --- | ---
 `AdminInstanceType` | The EC2 Instance type of the Admin node | `t3.small`
@@ -46,7 +46,7 @@ Parameter | Description | Default
 `ConfigEncryptionKey` | The key to encrypt the Curity Configuration | `null` (optional)
 
 \* This resource has to be created beforehand.
-
+> **_NOTE:_**  Please note that the EC2 instance type for the Admin and Runtime nodes have been set to a default value of `t3.small` for demonstration purpose only. Please refer to the [System guide](https://curity.io/docs/idsvr/latest/system-admin-guide/system-requirements.html#recommended-hardware-setup) for production system requirements details.
 ## Examples
 
 ### Understanding the IP Ranges
@@ -84,7 +84,7 @@ In order to enable this, an EFS Storage has to be created beforehand. In that st
 │.. ├── overrides
 │.. ├── template-areas
 ├── plugins
-│.. ├── pluging-group1
+│.. ├── plugin-group1
 │.. ├── plugin-group2
 ```
 
